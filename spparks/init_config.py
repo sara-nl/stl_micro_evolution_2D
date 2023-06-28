@@ -1,5 +1,5 @@
 """
-Last modified on Jun 20, 2023
+Last modified on Jun 28, 2023
 
 @author: MR 
 """
@@ -15,7 +15,7 @@ import os
 import subprocess
 import itertools
 import functools
-import argparse
+from argparse import ArgumentParser
 from typing import List, Tuple
 
 import shlex
@@ -85,7 +85,6 @@ def amend_config_file(config_name: str, working_dir: str) -> None:
     try:
         with open(config_path, "w") as new_config_file:
             new_config_file.write(config_name + "\t\n")
-        print("Config file amended successfully.")
     except IOError:
         print("Error: Could not amend config file.")
 
@@ -217,8 +216,8 @@ def amend_spparks_file(case_name, config_map, working_dir):
 # createFolder('./'+template_dir+'/')
 # case_name = 'case_single_hatch_1mm'
 # createFolder('./'+case_name+'/')
-def main():
-    working_dir = os.getcwd()
+def main(args):
+    working_dir = args.working_dir
 
     v_scan = [0.2]  # scan speed in [m/s]
     hatch = [20]  # hatch line distance in [mue_m]
@@ -248,4 +247,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument("--working_dir", type=str, default=os.getcwd(), help="define working dir")
+
+    args = parser.parse_args()
+    main(args)
