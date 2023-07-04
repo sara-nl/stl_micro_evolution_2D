@@ -1,4 +1,4 @@
-"""last modified on 3 July"""
+"""last modified on 4 July"""
 
 import os
 from typing import List, Tuple
@@ -12,10 +12,13 @@ from vtk.util.numpy_support import vtk_to_numpy, numpy_to_vtk
 
 # TODO
 # the path of the subfolders are in the config file
-# for now read only one and understand what it's format should be:
 # every subfolder is a sample: a video, an instance of my time evolution - this is a sample
 # every sample has a list of images:
 # every image is a temporal scrrenshot of my evolution - single vtk instance - ex vtk.0 is my image at time 0
+
+"""Collection of methods for reading the "subfolder/*.vti.*" generated from spparks"""
+"""generate hdf5 dataset from all subfolders"""
+"""also generate vti back from hdf5 as test (and for future use)"""
 
 
 def read_vtk_instance(reader: vtk.vtkXMLImageDataReader, filename: str) -> np.ndarray:
@@ -44,7 +47,7 @@ def read_vtk_instance(reader: vtk.vtkXMLImageDataReader, filename: str) -> np.nd
 
 
 def read_vtk_sample(reader: vtk.vtkXMLImageDataReader, path: str) -> List[np.ndarray]:
-    """We are inside a vHpdV_ folder: read the temporal sequence"""
+    """We are inside a vHpdV_ folder (that's my sample): read the temporal sequence"""
     # Iterate over the range of numbers from vti.0 to vti.N
     temporal_sample = []
     n = 0
@@ -94,7 +97,8 @@ def save_data_to_hdf5(data_lists: List[List[np.ndarray]], output_file: str) -> N
 
 
 def read_data_from_hdf5(input_file: str) -> List[List[np.ndarray]]:
-    data_arrays = []
+    """Given a file hdf5 return a list of samples (my whole dataset)"""
+    dataset_list = []
 
     with h5py.File(input_file, "r") as f:
         for group_name in f.keys():
@@ -105,23 +109,67 @@ def read_data_from_hdf5(input_file: str) -> List[List[np.ndarray]]:
                 data_array = group[dataset_name][:]
                 inner_list.append(data_array)
 
-            data_arrays.append(inner_list)
+            dataset_list.append(inner_list)
 
-    return data_arrays
+    return dataset_list
+
+
+def get_vtk_from_array(data_array: np.ndarray, output_path: str) -> None:
+    """Given a np_array (an image) return a vti file"""
+    array = data_array
+    dimx, dimy, dimz = array.shape
+    dimx, dimy, dimz = dimx + 1, dimy + 1, dimz + 1
+
+    image_data = vtk.vtkImageData()
+    image_data.SetDimensions(dimx, dimy, dimz)
+    image_data.SetSpacing([1, 1, 1])
+    image_data.SetOrigin([0, 0, 0])
+    image_data.AllocateScalars(vtk.VTK_INT, 1)
+
+    vtk_array = numpy_to_vtk(array.ravel(), deep=True)
+
+    vtk_array.SetName("Spin")
+    vtk_array.SetNumberOfComponents(1)
+
+    image_data.GetCellData().SetScalars(vtk_array)
+    image_data.GetPointData().RemoveArray(0)
+
+    writer = vtk.vtkXMLImageDataWriter()
+    writer.SetFileName(output_path)
+    writer.SetInputData(image_data)
+    writer.SetDataModeToAscii()
+    writer.EncodeAppendedDataOff()
+    writer.SetCompressor(None)
+
+    writer.Write()
+
+
+def get_vti_sample(data_list: List[np.ndarray], output_path: str) -> None:
+    """Given a sample (aka vHpdV_ folder), generate vti.i temporal sequence"""
+    for i, data_array in enumerate(data_list):
+        vti_path = os.path.join(output_path, f"test.vti.{i}")
+        get_vtk_from_array(data_array, vti_path)
 
 
 def main(args):
+    ### create hdf5 dataset from vti
     config_file = args.config_file
     reader = vtk.vtkXMLImageDataReader()
     data_list = read_vtk_from_config(args, config_file, reader)
 
     len_data = len(data_list)
-    hdf5_file = os.path.join(args.data_path, "data_24.hdf5")
+    hdf5_file = os.path.join(args.data_path, f"data_{len_data}.hdf5")
     save_data_to_hdf5(data_list, hdf5_file)
 
-    # checks
-    new_vti_path = os.path.join(args.data_path, "test1.vti.0")
+    ### can i come back from hdf5 to vtis?
+    hdf5_file = os.path.join(args.data_path, "data_24.hdf5")
+    new_vti_path = os.path.join(args.data_path, "test_output")
+
     read_data = read_data_from_hdf5(hdf5_file)
+    print(len(read_data))
+
+    # test: get the first subfolder
+    get_vti_sample(read_data[0], new_vti_path)
 
 
 if __name__ == "__main__":
