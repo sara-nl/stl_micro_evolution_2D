@@ -27,17 +27,18 @@ def read_vtk_instance(reader: vtk.vtkXMLImageDataReader, filename: str) -> np.nd
     cell_data = data.GetCellData()
     spin_data = cell_data.GetArray("Spin")
 
-    # get additional info
+    dimx, dimy, dimz = data.GetDimensions()
+
+    # get additional info (not needed for now)
     spacing = data.GetSpacing()
-    dimensions = data.GetDimensions()
     range_min, range_max = spin_data.GetRange()  # useful for normalize my data
     num_components = spin_data.GetNumberOfComponents()
 
-    np_array = vtk.util.numpy_support.vtk_to_numpy(spin_data)
+    np_array = vtk_to_numpy(spin_data)
 
-    # Subtract 1 from each dimension to get the correct dimensions for cell data
-    dimensions = tuple(dim - 1 for dim in dimensions)
-    np_array = np_array.reshape(dimensions, order="F")
+    # Subtract 1 to get the correct dimensions for cell data
+    dimx, dimy, dimz = dimx - 1, dimy - 1, dimz - 1
+    np_array = np_array.reshape(dimx, dimy, dimz)
 
     return np_array
 
