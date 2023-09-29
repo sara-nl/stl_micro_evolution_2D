@@ -67,7 +67,12 @@ def read_vtk_sample(reader: vtk.vtkXMLImageDataReader, path: str) -> List[np.nda
 def read_vtk_from_config(
     args: List[str], config_file: str, reader: vtk.vtkXMLImageDataReader()
 ) -> List[List[np.ndarray]]:
-    """Read the samples path from config file"""
+    """
+    Read the samples path from config file
+    
+    the np.ndarray shape is (100,100,50)
+    """
+
     data_list = []
     with open(config_file, "r") as file:
         for line in file:
