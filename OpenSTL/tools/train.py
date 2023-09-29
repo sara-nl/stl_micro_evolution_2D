@@ -36,7 +36,6 @@ if __name__ == "__main__":
         if args.config_file is None
         else args.config_file
     )
-    cfg_path = "/home/monicar/predictive_zoo/OpenSTL/configs/mmnist/simvp/SimVP_gSTA.py"
     if args.overwrite:
         config = update_config(config, load_config(cfg_path), exclude_keys=["method"])
     else:

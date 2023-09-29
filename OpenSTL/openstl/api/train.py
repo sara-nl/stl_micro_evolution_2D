@@ -9,7 +9,6 @@ import numpy as np
 from typing import Dict, List
 from fvcore.nn import FlopCountAnalysis, flop_count_table
 
-from torch.utils.tensorboard import SummaryWriter
 import wandb
 
 import torch
@@ -121,9 +120,6 @@ class BaseExperiment(object):
             else self.args.ex_name.split(self.args.res_dir + "/")[-1],
         )
 
-        # tensorboard
-        self.writer = SummaryWriter(log_dir=os.path.join(self.path, "tensorboard_logs"))
-
         self.checkpoints_path = osp.join(self.path, "checkpoints")
         if self._rank == 0:
             check_dir(self.path)
@@ -175,7 +171,6 @@ class BaseExperiment(object):
 
     def _build_method(self):
         self.steps_per_epoch = len(self.train_loader)
-        # self.device = torch.device("cpu")
         self.method = method_maps[self.args.method](
             self.args, self.device, self.steps_per_epoch
         )

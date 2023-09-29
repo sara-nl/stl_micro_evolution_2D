@@ -24,9 +24,7 @@ def create_parser():
         type=int,
         help="Interval in batches between display of training metrics",
     )
-    parser.add_argument(
-        "--res_dir", default="/home/monicar/predictive_zoo/OpenSTL/work_dirs", type=str
-    )
+    parser.add_argument("--res_dir", default="work_dirs", type=str)
     parser.add_argument("--ex_name", "-ex", default="Debug", type=str)
     parser.add_argument("--use_gpu", default=True, type=bool)
     parser.add_argument(
@@ -113,9 +111,7 @@ def create_parser():
         "--val_batch_size", "-vb", default=1, type=int, help="Validation batch size"
     )
     parser.add_argument("--num_workers", default=4, type=int)
-    parser.add_argument(
-        "--data_root", default="/home/monicar/predictive_zoo/OpenSTL/data"
-    )
+    parser.add_argument("--data_root", default="data")
     parser.add_argument(
         "--dataname",
         "-d",
@@ -201,7 +197,7 @@ def create_parser():
     parser.add_argument(
         "--config_file",
         "-c",
-        default="/home/monicar/predictive_zoo/OpenSTL/configs/pf/predrnn/PredRNN.py",
+        default="configs/pf/SimVP_gSTA.py",
         type=str,
         help="Path to the default config file",
     )
@@ -394,8 +390,8 @@ def default_parser():
         "use_prefetcher": False,
         "drop_last": False,
         # method parameters
-        "method": "VTUNet",  # "PredRNN",  # "SimVP",
-        "config_file": "/home/monicar/predictive_zoo/OpenSTL/configs/pf/predrnn/PredRNN.py",
+        "method": "SimVP",
+        "config_file": "configs/pf/SimVP_gSTA.py",
         "model_type": "gSTA",
         "drop": 0,
         "drop_path": 0,
