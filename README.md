@@ -15,7 +15,7 @@ pip install -r requirements.txt
 python setup.py develop
 ```
 
-OpenSTL is a comprehensive benchmark for spatio-temporal predictive learning from https://github.com/chengtan9907/OpenSTL/ .
+OpenSTL is a comprehensive benchmark for spatio-temporal predictive learning largely from https://github.com/chengtan9907/OpenSTL/ minus fat.
 
 Method added based on Unet and Swin transformers: VT Unet
 original Pytorch implementation: https://github.com/himashi92/VT-UNet for segmentation tasks. Reporposed for prediction tasks. 
