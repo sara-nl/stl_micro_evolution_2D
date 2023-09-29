@@ -7,7 +7,6 @@ from openstl.utils import (
     show_video_gif_multiple,
     show_video_gif_single,
     show_video_line,
-    show_taxibj,
     show_weather_bench,
 )
 
