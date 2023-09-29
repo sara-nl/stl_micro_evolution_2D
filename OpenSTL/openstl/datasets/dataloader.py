@@ -20,47 +20,10 @@ def load_data(
         return load_data(
             batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
         )
-    elif dataname == "bair":
-        from .dataloader_bair import load_data
-
-        return load_data(
-            batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
-        )
-    elif dataname == "human":
-        from .dataloader_human import load_data
-
-        return load_data(
-            batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
-        )
-    elif dataname == "kitticaltech":
-        from .dataloader_kitticaltech import load_data
-
-        return load_data(
-            batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
-        )
-    elif "kth" in dataname:  # 'kth', 'kth20', 'kth40'
-        from .dataloader_kth import load_data
-
-        return load_data(
-            batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
-        )
     elif "mnist" in dataname:  # 'mmnist', 'mfmnist'
         from .dataloader_moving_mnist import load_data
 
         cfg_dataloader["data_name"] = kwargs.get("data_name", "mnist")
-        return load_data(
-            batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
-        )
-    elif "kinetics" in dataname:  # 'kinetics400', 'kinetics600'
-        from .dataloader_kinetics import load_data
-
-        cfg_dataloader["data_name"] = kwargs.get("data_name", "kinetics400")
-        return load_data(
-            batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
-        )
-    elif dataname == "taxibj":
-        from .dataloader_taxibj import load_data
-
         return load_data(
             batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
         )
