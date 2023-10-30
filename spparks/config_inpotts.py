@@ -1,4 +1,5 @@
 """
+Last modified on 30 Oct 2023
 
 Script that for a given new case_name (ex: 'vHpdV_20_0_20_LL_x_10_60_30_7_40_75_35_12_0_1'):
     - check if the corresponding folder already exists
