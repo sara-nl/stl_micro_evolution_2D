@@ -53,7 +53,6 @@ class PF_Dataset(Dataset):
         if self.videos.max() > 1.0:
             self.videos = self.videos.astype(np.float32) / 255.0
 
-
     def _sample_frames_from_npz(self, npz_path, num_frames=20, key="input_raw_data"):
         with np.load(npz_path) as data:
             all_frames = data[key]
@@ -62,11 +61,10 @@ class PF_Dataset(Dataset):
         num_videos = len(all_frames) // num_frames
         all_frames = all_frames[: num_videos * num_frames]
 
-        # Reshape the frames into videos of size (num_videos, num_frames, ...)
+        # Reshape the frames into videos of size (num_videos, num_frames, size)
         videos = all_frames.reshape((-1, num_frames) + all_frames.shape[1:])
 
         return videos
-
 
     def __len__(self):
         return len(self.videos)

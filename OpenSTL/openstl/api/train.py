@@ -59,11 +59,12 @@ class BaseExperiment(object):
         self._dist = self.args.dist
         self._early_stop = self.args.early_stop_epoch
 
-        wandb.init(
-            project="openSTL_PF",
-            entity="mrotulo",
-            sync_tensorboard=True,
-        )
+        # init wandb
+        #wandb.init(
+        #    project="openSTL_PF",
+        #    entity="yourname",
+        #    sync_tensorboard=True,
+        #)
 
         self._preparation(dataloaders)
         if self._rank == 0:

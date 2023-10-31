@@ -13,7 +13,7 @@ from openstl.utils import gather_tensors_batch, get_dist_info, ProgressBar
 
 has_native_amp = False
 try:
-    if getattr(torch.cuda.amp, 'autocast') is not None:
+    if getattr(torch.cuda.amp, "autocast") is not None:
         has_native_amp = True
 except AttributeError:
     pass
@@ -32,34 +32,41 @@ class Base_method(object):
     def __init__(self, args, device, steps_per_epoch):
         super(Base_method, self).__init__()
         self.args = args
-        self.dist = args.dist
         self.device = device
         self.config = args.__dict__
         self.criterion = None
         self.model_optim = None
         self.scheduler = None
+
+        # distributed training
+        self.dist = args.dist
         if self.dist:
             self.rank, self.world_size = get_dist_info()
-            assert self.rank == int(device.split(':')[-1])
+            assert self.rank == int(device.split(":")[-1])
         else:
             self.rank, self.world_size = 0, 1
+
+        # gradient clipping
         self.clip_value = self.args.clip_grad
         self.clip_mode = self.args.clip_mode if self.clip_value is not None else None
+
         # setup automatic mixed-precision (AMP) loss scaling and op casting
         self.amp_autocast = suppress  # do nothing
         self.loss_scaler = None
+
         # setup metrics
-        if 'weather' in self.args.dataname:
-            self.metric_list, self.spatial_norm = ['mse', 'rmse', 'mae'], True
+        if "weather" in self.args.dataname:
+            self.metric_list, self.spatial_norm = ["mse", "rmse", "mae"], True
         else:
-            self.metric_list, self.spatial_norm = ['mse', 'mae'], False
+            self.metric_list, self.spatial_norm = ["mse", "mae"], False
 
     def _build_model(self, **kwargs):
         raise NotImplementedError
 
     def _init_optimizer(self, steps_per_epoch):
         return get_optim_scheduler(
-            self.args, self.args.epoch, self.model, steps_per_epoch)
+            self.args, self.args.epoch, self.model, steps_per_epoch
+        )
 
     def _init_distributed(self):
         """Initialize DDP training"""
@@ -67,14 +74,17 @@ class Base_method(object):
             self.amp_autocast = torch.cuda.amp.autocast
             self.loss_scaler = NativeScaler()
             if self.rank == 0:
-               print('Using native PyTorch AMP. Training in mixed precision (fp16).')
+                print("Using native PyTorch AMP. Training in mixed precision (fp16).")
         else:
-            print('AMP not enabled. Training in float32.')
-        self.model = NativeDDP(self.model, device_ids=[self.rank],
-                               broadcast_buffers=self.args.broadcast_buffers,
-                               find_unused_parameters=self.args.find_unused_parameters)
+            print("AMP not enabled. Training in float32.")
+        self.model = NativeDDP(
+            self.model,
+            device_ids=[self.rank],
+            broadcast_buffers=self.args.broadcast_buffers,
+            find_unused_parameters=self.args.find_unused_parameters,
+        )
 
-    def train_one_epoch(self, runner, train_loader, **kwargs): 
+    def train_one_epoch(self, runner, train_loader, **kwargs):
         """Train the model with train_loader.
 
         Args:
@@ -117,13 +127,29 @@ class Base_method(object):
                 pred_y = self._predict(batch_x, batch_y)
 
             if gather_data:  # return raw datas
-                results.append(dict(zip(['inputs', 'preds', 'trues'],
-                                        [batch_x.cpu().numpy(), pred_y.cpu().numpy(), batch_y.cpu().numpy()])))
+                results.append(
+                    dict(
+                        zip(
+                            ["inputs", "preds", "trues"],
+                            [
+                                batch_x.cpu().numpy(),
+                                pred_y.cpu().numpy(),
+                                batch_y.cpu().numpy(),
+                            ],
+                        )
+                    )
+                )
             else:  # return metrics
-                eval_res, _ = metric(pred_y.cpu().numpy(), batch_y.cpu().numpy(),
-                                     data_loader.dataset.mean, data_loader.dataset.std,
-                                     metrics=self.metric_list, spatial_norm=self.spatial_norm, return_log=False)
-                eval_res['loss'] = self.criterion(pred_y, batch_y).cpu().numpy()
+                eval_res, _ = metric(
+                    pred_y.cpu().numpy(),
+                    batch_y.cpu().numpy(),
+                    data_loader.dataset.mean,
+                    data_loader.dataset.std,
+                    metrics=self.metric_list,
+                    spatial_norm=self.spatial_norm,
+                    return_log=False,
+                )
+                eval_res["loss"] = self.criterion(pred_y, batch_y).cpu().numpy()
                 for k in eval_res.keys():
                     eval_res[k] = eval_res[k].reshape(1)
                 results.append(eval_res)
@@ -138,7 +164,9 @@ class Base_method(object):
         for k in results[0].keys():
             results_cat = np.concatenate([batch[k] for batch in results], axis=0)
             # gether tensors by GPU (it's no need to empty cache)
-            results_gathered = gather_tensors_batch(results_cat, part_size=min(part_size*8, 16))
+            results_gathered = gather_tensors_batch(
+                results_cat, part_size=min(part_size * 8, 16)
+            )
             results_strip = np.concatenate(results_gathered, axis=0)[:length]
             results_all[k] = results_strip
         return results_all
@@ -166,13 +194,29 @@ class Base_method(object):
                 pred_y = self._predict(batch_x, batch_y)
 
             if gather_data:  # return raw datas
-                results.append(dict(zip(['inputs', 'preds', 'trues'],
-                                        [batch_x.cpu().numpy(), pred_y.cpu().numpy(), batch_y.cpu().numpy()])))
+                results.append(
+                    dict(
+                        zip(
+                            ["inputs", "preds", "trues"],
+                            [
+                                batch_x.cpu().numpy(),
+                                pred_y.cpu().numpy(),
+                                batch_y.cpu().numpy(),
+                            ],
+                        )
+                    )
+                )
             else:  # return metrics
-                eval_res, _ = metric(pred_y.cpu().numpy(), batch_y.cpu().numpy(),
-                                     data_loader.dataset.mean, data_loader.dataset.std,
-                                     metrics=self.metric_list, spatial_norm=self.spatial_norm, return_log=False)
-                eval_res['loss'] = self.criterion(pred_y, batch_y).cpu().numpy()
+                eval_res, _ = metric(
+                    pred_y.cpu().numpy(),
+                    batch_y.cpu().numpy(),
+                    data_loader.dataset.mean,
+                    data_loader.dataset.std,
+                    metrics=self.metric_list,
+                    spatial_norm=self.spatial_norm,
+                    return_log=False,
+                )
+                eval_res["loss"] = self.criterion(pred_y, batch_y).cpu().numpy()
                 for k in eval_res.keys():
                     eval_res[k] = eval_res[k].reshape(1)
                 results.append(eval_res)
@@ -200,15 +244,21 @@ class Base_method(object):
         """
         self.model.eval()
         if self.dist and self.world_size > 1:
-            results = self._dist_forward_collect(vali_loader, len(vali_loader.dataset), gather_data=False)
+            results = self._dist_forward_collect(
+                vali_loader, len(vali_loader.dataset), gather_data=False
+            )
         else:
-            results = self._nondist_forward_collect(vali_loader, len(vali_loader.dataset), gather_data=False)
+            results = self._nondist_forward_collect(
+                vali_loader, len(vali_loader.dataset), gather_data=False
+            )
 
         eval_log = ""
         for k, v in results.items():
             v = v.mean()
             if k != "loss":
-                eval_str = f"{k}:{v.mean()}" if len(eval_log) == 0 else f", {k}:{v.mean()}"
+                eval_str = (
+                    f"{k}:{v.mean()}" if len(eval_log) == 0 else f", {k}:{v.mean()}"
+                )
                 eval_log += eval_str
 
         return results, eval_log
@@ -241,18 +291,17 @@ class Base_method(object):
         """
         lr: Union[List[float], Dict[str, List[float]]]
         if isinstance(self.model_optim, torch.optim.Optimizer):
-            lr = [group['lr'] for group in self.model_optim.param_groups]
+            lr = [group["lr"] for group in self.model_optim.param_groups]
         elif isinstance(self.model_optim, dict):
             lr = dict()
             for name, optim in self.model_optim.items():
-                lr[name] = [group['lr'] for group in optim.param_groups]
+                lr[name] = [group["lr"] for group in optim.param_groups]
         else:
-            raise RuntimeError(
-                'lr is not applicable because optimizer does not exist.')
+            raise RuntimeError("lr is not applicable because optimizer does not exist.")
         return lr
 
     def clip_grads(self, params, norm_type: float = 2.0):
-        """ Dispatch to gradient clipping method
+        """Dispatch to gradient clipping method
 
         Args:
             parameters (Iterable): model parameters to clip
@@ -262,11 +311,11 @@ class Base_method(object):
         """
         if self.clip_mode is None:
             return
-        if self.clip_mode == 'norm':
+        if self.clip_mode == "norm":
             torch.nn.utils.clip_grad_norm_(params, self.clip_value, norm_type=norm_type)
-        elif self.clip_mode == 'value':
+        elif self.clip_mode == "value":
             torch.nn.utils.clip_grad_value_(params, self.clip_value)
-        elif self.clip_mode == 'agc':
+        elif self.clip_mode == "agc":
             adaptive_clip_grad(params, self.clip_value, norm_type=norm_type)
         else:
             assert False, f"Unknown clip mode ({self.clip_mode})."

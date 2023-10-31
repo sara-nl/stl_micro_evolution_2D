@@ -37,7 +37,6 @@ class VTUNet(Base_method):
         self.criterion = nn.MSELoss()
 
     def _build_model(self, args):
-
         return VTUNet_Model(args).to(self.device)
 
     def _predict(self, batch_x, batch_y, **kwargs):

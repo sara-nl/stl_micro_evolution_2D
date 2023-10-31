@@ -2,6 +2,7 @@
 
 from .dataloader_moving_mnist import MovingMNIST
 from .dataloader_pf import PF_Dataset
+from .dataloader_kmc import KMC_Dataset
 from .dataloader_weather import WeatherBenchDataset
 from .dataloader import load_data
 from .dataset_constant import dataset_parameters

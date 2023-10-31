@@ -3,9 +3,6 @@ import torch.nn as nn
 
 from openstl.modules import SwinTransformer3D_Sys
 
-# TODO remove the following and use the above
-# from my_swin_transformer import SwinTransformer3D_Sys
-
 
 class VTUNet_Model(nn.Module):
     """class of VT-Unet
