@@ -62,6 +62,56 @@ def get_mpl_colormap(cmap_name):
     return color_range.reshape(256, 1, 3)
 
 
+def show_video_line_combined(
+    truth_data,
+    pred_data,
+    ncols,
+    vmax=0.6,
+    vmin=0.0,
+    cmap="gray",
+    norm=None,
+    cbar=False,
+    format="png",
+    out_path=None,
+    use_rgb=False,
+):
+    """Generate images with both truth and predicted video sequences."""
+
+    assert (
+        truth_data.shape == pred_data.shape
+    ), "Truth and predicted data shapes must match."
+
+    # Combining truth and predicted sequences vertically
+    combined_data = np.concatenate([truth_data, pred_data], axis=2)
+
+    fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(3.25 * ncols, 6))
+    plt.subplots_adjust(wspace=0.01, hspace=0.01)
+
+    if len(combined_data.shape) > 3:
+        combined_data = combined_data.swapaxes(1, 2).swapaxes(2, 3)
+
+    for t in range(ncols):
+        for r, row_axes in enumerate(axes):
+            ax = row_axes[t]
+            if use_rgb:
+                im = ax.imshow(
+                    cv2.cvtColor(combined_data[t + r * ncols], cv2.COLOR_BGR2RGB)
+                )
+            else:
+                im = ax.imshow(combined_data[t + r * ncols], cmap=cmap, norm=norm)
+            ax.axis("off")
+            im.set_clim(vmin, vmax)
+
+    if cbar and ncols > 1:
+        cbaxes = fig.add_axes([0.9, 0.15, 0.04 / ncols, 0.7])
+        cbar = fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.1, cax=cbaxes)
+
+    plt.show()
+    if out_path is not None:
+        fig.savefig(out_path, format=format, pad_inches=0, bbox_inches="tight")
+    plt.close()
+
+
 def show_video_line(
     data,
     ncols,
