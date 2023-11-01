@@ -65,6 +65,24 @@ def create_config_map(
 
 
 def _write_chunk(chunk: List[str], output_file: str) -> bool:
+    """
+    Write a chunk of configuration names to a specified file.
+
+    Parameters:
+    - chunk (List[str]): A list of configuration names to be written to the file.
+    - output_file (str): The path to the file where the chunk should be written.
+
+    Each configuration name in the chunk is written to a new line in the file,
+    followed by a tab character.
+
+    Example:
+    If chunk = ["config1", "config2"], the file content will be:
+    config1\t
+    config2\t
+
+    Note:
+    This function will overwrite the content of the file if it already exists.
+    """
     try:
         with open(output_file, "w") as file:
             for config_name in chunk:
@@ -77,12 +95,37 @@ def _write_chunk(chunk: List[str], output_file: str) -> bool:
 def amend_config_file_chunks(
     config_names: List[str], output_dir: str, num_chunks: int = 10
 ) -> List[Optional[str]]:
-    # Calculate chunk size
+    """
+    Split a list of configuration names into chunks and write each chunk to a separate file.
+
+    Returns:
+    - List[Optional[str]]: A list of file paths where the chunks were successfully written.
+      If writing a chunk fails, `None` is included in the list for that chunk.
+
+    This function calculates the chunk size based on the length of `config_names` and the specified `num_chunks`.
+    It then splits the `config_names` list into chunks and writes each chunk to a separate file in the `output_dir`.
+    The files are named as `config_file_{i}`, where `i` ranges from 1 to `num_chunks`.
+
+    The writing operation is parallelized to improve efficiency. The number of parallel tasks is determined by the
+    environment variable `SLURM_CPUS_PER_TASK`, defaulting to 1 if not set.
+
+    Example:
+    If config_names = ["config1", "config2", "config3", "config4"] and num_chunks = 2,
+    two files will be created in `output_dir`:
+    - config_file_1 containing "config1" and "config2"
+    - config_file_2 containing "config3" and "config4"
+
+    Note:
+    If there's an error writing a chunk, an error message is printed, and the respective position in the returned list
+    will contain `None`.
+    """
     chunk_size = len(config_names) // num_chunks
     chunks = [
         config_names[i : i + chunk_size]
         for i in range(0, len(config_names), chunk_size)
     ]
+
+    print("num of lines in the chunk: ", len(chunks[0]))
 
     output_files = [
         os.path.join(output_dir, f"config_file_{i}") for i in range(1, num_chunks + 1)
@@ -171,6 +214,8 @@ def main(args):
     V_laser = create_HAZ_permutations(params)
 
     config_map, config_name_list = create_config_map(params, V_laser)
+
+    print("num possible configurations: ", len(config_name_list))
 
     # write config file
     path = amend_config_file_chunks(config_name_list, output_dir)
