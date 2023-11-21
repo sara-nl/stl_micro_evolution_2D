@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 
 import h5py
 import vtk
+
 import pyvista as pv
 
 from vtk.util.numpy_support import vtk_to_numpy, numpy_to_vtk
@@ -49,7 +50,7 @@ def render_3D_from_numpy(numpy_array: np.ndarray, filename: str = "visual_np.png
 
 
 def render_2D_from_numpy(numpy_array: np.ndarray, filename: str = "visual_np.png"):
-    grid = pv.UniformGrid()
+    grid = pv.ImageData()  # pv.UniformGrid()
 
     # Set the dimensions of the grid (adding 1 because grid points define the cells)
     grid.dimensions = numpy_array.shape[0] + 1, numpy_array.shape[1] + 1, 1
@@ -63,7 +64,7 @@ def render_2D_from_numpy(numpy_array: np.ndarray, filename: str = "visual_np.png
     pv.start_xvfb()
     plotter = pv.Plotter(off_screen=True)
 
-    plotter.add_mesh(grid, cmap="viridis", show_edges=True)
+    plotter.add_mesh(grid, cmap="viridis", show_edges=False)
 
     plotter.show(auto_close=False)
     plotter.screenshot(filename)
