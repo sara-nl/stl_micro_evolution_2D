@@ -122,7 +122,7 @@ def extract_top_2D_slice_with_voi(
 
 
 def convert_vtk_instance_to_numpy(
-    vtk_data_object: vtk.vtkImageData, array_name: str = "Spin", slicing: bool = True
+    vtk_data_object: vtk.vtkImageData, array_name: str = "Spin", slicing: bool = False
 ) -> np.ndarray:
     """
     Convert single vti.n data object to numpy array, handling both 2D and 3D data.
@@ -305,7 +305,7 @@ def main(args):
     len_data = len(data_list)
 
     instance = data_list[0][0]
-    visualize_vtk(instance)
+    # visualize_vtk(instance)
 
     # hdf5_file = os.path.join(args.data_path, f"data_{len_data}.hdf5")
     # save_data_to_hdf5(data_list, hdf5_file)

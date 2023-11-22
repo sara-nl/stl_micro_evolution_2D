@@ -171,35 +171,10 @@ def _convert_to_array(
     return sample_np
 
 
-def preprocess_data_to_np(
-    sample: List[vtk.vtkImageData],
-    generate_3D: bool = False,
-) -> List[np.ndarray]:
-    # TODO
-    """
-    order the samples based on time
-    get rid of the positional indeces
-    extract 2D by default
-    if 3D enabled -> process to np array as well
-    """
-    # sample_2D_list.append(_convert_to_array(sample_2D, slicing=True))
-    sample_np = []
-    if generate_3D:
-        sample_np = _convert_to_array(sample, slicing=False)
-        # sample_3D_list.append(_convert_to_array(sample, slicing=False))
-    else:
-        sample_2D = _extract_2D(sample)
-        sample_np = _convert_to_array(sample_2D, slicing=True)
-
-    return sample_np
-
-
 def _order_temporal_sample(sample: List[vtk.vtkImageData]) -> List[vtk.vtkImageData]:
     """
     order the samples based on time
     get rid of the positional indeces
-    extract 2D by default
-    if 3D enabled -> process to np array as well
     """
     sample.sort(key=lambda x: x[0])
     sorted_sample = [instance for _, instance in sample]
@@ -210,8 +185,7 @@ def generate_datasets(
     data_list: List[List[vtk.vtkImageData]],
     output_path: str,
     output_name: str,
-    preprocessing: bool = False,
-    generate_3D: bool = False,
+    slicing: bool = False,
 ) -> str:
     """
     Generate the datasets for ML training.
@@ -225,28 +199,27 @@ def generate_datasets(
     File paths of the saved 3D and 2D HDF5 datasets.
 
     """
-    sample_np_list = []
+    # before saving it to hdf5, vtk objects should be converted to numpy arrays.
+    sample_3D_list = []
+    sample_2D_list = []
     for sample in data_list:
         sample = _order_temporal_sample(sample)
+        sample_3D_list.append(_convert_to_array(sample, slicing=False))
 
-        if preprocessing:
-            sample_np = preprocess_data_to_np(sample, generate_3D)
-            sample_np_list.append(sample_np)
-
-    # save raw vtk objects
-    datapath_path = os.path.join(output_path, output_name)
-    save_data_to_hdf5(data_list, datapath_path)
+        if slicing:
+            sample_2D = _extract_2D(sample)
+            sample_2D_list.append(_convert_to_array(sample_2D, slicing=True))
 
     # save to hd5f format
-    # datapath_2D = os.path.join(output_path, output_name)
-    # save_data_to_hdf5(sample_2D_list, datapath_2D)
+    datapath_3D = os.path.join(output_path, f"{output_name}_3D.h5")
+    save_data_to_hdf5(sample_3D_list, datapath_3D)
 
-    # datapath_3D = None
-    # if generate_3D:
-    #    datapath_3D = os.path.join(output_path, "KMC_3D.h5")
-    #    save_data_to_hdf5(sample_3D_list, datapath_3D)
+    datapath_2D = None
+    if slicing:
+        datapath_2D = os.path.join(output_path, f"{output_name}_2D.h5")
+        save_data_to_hdf5(sample_2D_list, datapath_2D)
 
-    return datapath_path
+    return datapath_2D, datapath_3D
 
 
 def main(args):
@@ -259,16 +232,12 @@ def main(args):
 
     print("Number of samples: ", len(sample_list))
 
-    dataset_saved = generate_datasets(
-        sample_list, output_path, output_name, preprocessing=False, generate_3D=False
-    )
-
     ## generate 2D / 3D datasetsgenerate_datasets(
-    # dataset_2D, dataset_3D = generate_datasets(
-    #    sample_list, output_path, output_name, generate_3D=False
-    # )
-    print("raw data saved in: ", dataset_saved)
-    # print("3D data saved in: ", dataset_3D)
+    dataset_2D, dataset_3D = generate_datasets(
+        sample_list, output_path, output_name, slicing=False
+    )
+    print("2D data saved in: ", dataset_2D)
+    print("3D data saved in: ", dataset_3D)
 
 
 if __name__ == "__main__":
@@ -276,9 +245,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tar_path",
         type=str,
-        default="/projects/1/monicar/exp_1.tar.gz",  #
+        default="/projects/1/monicar/test.tar.gz",  # exp_1.tar.gz
     )
     parser.add_argument("--output_path", type=str, default="/projects/1/monicar")
-    parser.add_argument("--output_name", type=str, default="exp_1_original.h5")
+    parser.add_argument("--output_name", type=str, default="trial")
     args = parser.parse_args()
     main(args)
