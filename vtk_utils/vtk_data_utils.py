@@ -9,8 +9,8 @@ from typing import List, Tuple
 import numpy as np
 from argparse import ArgumentParser
 
-import h5py
 import vtk
+import h5py
 
 import pyvista as pv
 
