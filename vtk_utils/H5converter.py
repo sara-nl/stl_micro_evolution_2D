@@ -15,7 +15,9 @@ from vtk_data_utils import (
 )
 
 """
-Read raw vti files from compressed tar.gz, extract images perform preprocessing deterministic operations, and save it npz format. 
+Read raw vti files from compressed tar.gz, 
+Extract 2D 3D images,
+Save them to HDF5 format. 
 
 To check: I am assuming that every temporal sample is made of 90 time frames
 
@@ -26,28 +28,6 @@ single small tar:
 scale up:
 - parallelize -> I have N config files -> N tar.gz 
 """
-
-
-def _write_missing_files_to_file(missing_files: List[str], output_path: str):
-    """Write the list of missing files to a file."""
-    file_path = os.path.join(output_path, "config_missing")
-    with open(file_path, "w") as f:
-        for file_name in missing_files:
-            f.write(file_name + "\n")
-
-
-def _list_subfolders_in_tar(tar_path):
-    subfolders = set()
-    with tarfile.open(tar_path, "r:gz") as tar:
-        for (
-            member
-        ) in (
-            tar.getmembers()
-        ):  # TODO reads everything first - so if file corrupted then i get EOF error - use stream instead
-            # Extract the directory name from the member's path
-            case_name = member.name.split("/")[0]
-            subfolders.add(case_name)
-    return list(subfolders)
 
 
 def _extract_to_temporary_file(tar_member, tar) -> str:
@@ -67,7 +47,6 @@ def _append_temporal_instances(
         return all_sample  # do not append corrupted sample
 
     temporal_sequence.sort(key=lambda x: x[0])
-    # sorted_instances = [instance for _, instance in temporal_sequence] NOT needed
 
     for _, instance in temporal_sequence:
         # TODO do any preprocessing of instances
@@ -128,18 +107,14 @@ def extract_sample_from_tar(tar_path: str) -> List[List[vtk.vtkImageData]]:
 def save_data_to_hdf5(data_list: List[np.ndarray], output_file: str) -> None:
     with h5py.File(output_file, "w") as hdf_file:
         hdf_file.create_dataset("images", data=np.array(data_list))
-        # for i, array in enumerate(data_list):
-        #    hdf_file.create_dataset(f"array_{i}", data=array)
-
-    print("dataset file saved")
 
 
 def read_data_from_hdf5(input_file: str) -> List[np.ndarray]:
-    """Given a file hdf5 return a list of samples (my whole dataset)"""
-    # data_list = []
-
+    """
+    Given a file hdf5 return a list of samples (my whole dataset)
+    Load everything to memory
+    """
     with h5py.File(input_file, "r") as hdf_file:
-        # data_list = [hdf_file[f"array_{i}"][()] for i in range(len(hdf_file.keys()))]
         data_list = list(hdf_file["images"])
 
     return data_list
@@ -187,6 +162,19 @@ def generate_datasets(
     return datapath_2D, datapath_3D
 
 
+def check_empty_elements_in_hdf5(input_file: str):
+    empty_indices = []
+
+    with h5py.File(input_file, "r") as hdf_file:
+        images_dataset = hdf_file["images"]
+        tmp = hdf_file["images"][1:20]
+        for i in range(len(images_dataset)):
+            if images_dataset[i].size == 0:  # Checking if the numpy array is empty
+                empty_indices.append(i)
+
+    return empty_indices
+
+
 def main(args):
     tar_path = args.tar_path
     output_path = args.output_path
@@ -194,16 +182,14 @@ def main(args):
 
     # Extract the samples from tar
     sample_list = extract_sample_from_tar(tar_path)
-
     print("Number of samples: ", len(sample_list))
 
-    ## generate 2D / 3D datasetsgenerate_datasets(
+    # generate 2D / 3D datasetsgenerate_datasets(
     dataset_2D, dataset_3D = generate_datasets(
         sample_list, output_path, output_name, slicing=True
     )
     print("2D data saved in: ", dataset_2D)
     print("3D data saved in: ", dataset_3D)
-    print("done")
 
 
 if __name__ == "__main__":
@@ -211,7 +197,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tar_path",
         type=str,
-        default="/projects/1/monicar/experiment_1/smallest.tar.gz",  # exp_1.tar.gz
+        default="/projects/1/monicar/experiment_1/smallest.tar.gz",
     )
     parser.add_argument("--output_path", type=str, default="/projects/1/monicar")
     parser.add_argument("--output_name", type=str, default="prova")
