@@ -133,7 +133,7 @@ def create_parser():
     )
     parser.add_argument(
         "--total_length",
-        default=None,
+        default=24,
         type=int,
         help="Total Sequence length for prediction",
     )

@@ -24,7 +24,7 @@ dataset_parameters = {
         "metrics": ["mse", "mae", "ssim", "psnr"],
     },
     "kmc": {
-        "in_shape": [12, 1, 64, 64],  # TODO change it
+        "in_shape": [12, 1, 100, 100],
         "pre_seq_length": 12,
         "aft_seq_length": 12,
         "total_length": 24,

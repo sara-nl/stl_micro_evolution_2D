@@ -12,6 +12,7 @@ from .utils import create_loader
 __all__ = [
     "MovingMNIST",
     "PF_Dataset",
+    "KMC_Dataset",
     "WeatherBenchDataset",
     "load_data",
     "dataset_parameters",
