@@ -30,6 +30,24 @@ scale up:
 """
 
 
+def count_samples_in_tar(tar_path: str) -> int:
+    n = 0
+    try:
+        with tarfile.open(tar_path, "r:gz") as tar:
+            for member in iter(lambda: tar.next(), None):
+                if member.isdir():
+                    # print("processing directory:", member.name)
+                    n += 1
+
+    except EOFError:
+        print("Warning: Reached corrupted section in tar file")
+
+    except tarfile.ReadError:
+        print(f"Error reading tar file: {tar_path}")
+
+    return n
+
+
 def _extract_to_temporary_file(tar_member, tar) -> str:
     """Extract a tar file member to a temporary file and return the file path."""
     with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
@@ -46,14 +64,26 @@ def _append_temporal_instances(
     if len(temporal_sequence) != 90:
         return all_sample  # do not append corrupted sample
 
-    temporal_sequence.sort(key=lambda x: x[0])
+    # temporal_sequence.sort(key=lambda x: x[0])
 
-    for _, instance in temporal_sequence:
+    for _, instance in sorted(temporal_sequence, key=lambda x: x[0]):
         # TODO do any preprocessing of instances
         # if slicing: 2D slicing, then nparray , otherwise 3D: nparray
         all_sample.append(instance)
 
     return all_sample
+
+
+def _append_temporal_instances_with_sorted(
+    temporal_sequence: List[Tuple[int, vtk.vtkImageData]],
+    all_sample: List[vtk.vtkImageData],
+) -> List[vtk.vtkImageData]:
+    if len(temporal_sequence) != 90:
+        return all_sample  # do not append corrupted sample
+
+    return all_sample + [
+        instance for _, instance in sorted(temporal_sequence, key=lambda x: x[0])
+    ]
 
 
 def extract_sample_from_tar(tar_path: str) -> List[List[vtk.vtkImageData]]:
@@ -180,6 +210,11 @@ def main(args):
     output_path = args.output_path
     output_name = args.output_name
 
+    n = count_samples_in_tar(tar_path)
+
+    print("tar name is", tar_path)
+    print("number of samples in tar is: ", n)
+
     # Extract the samples from tar
     sample_list = extract_sample_from_tar(tar_path)
     print("Number of samples: ", len(sample_list))
@@ -191,13 +226,15 @@ def main(args):
     print("2D data saved in: ", dataset_2D)
     print("3D data saved in: ", dataset_3D)
 
+    # visualize images:
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument(
         "--tar_path",
         type=str,
-        default="/projects/1/monicar/experiment_1/smallest.tar.gz",
+        default="/projects/1/monicar/exp_2.tar.gz",
     )
     parser.add_argument("--output_path", type=str, default="/projects/1/monicar")
     parser.add_argument("--output_name", type=str, default="prova")
