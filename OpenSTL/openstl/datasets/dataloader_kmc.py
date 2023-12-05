@@ -48,12 +48,13 @@ class KMC_Dataset(Dataset):
     def __init__(
         self,
         data_root,
+        datafile,
         n_frames_input=10,
         n_frames_output=10,
         is_3D=False,
         cache=False,
-        resize=(96, 96),
-        num_frames_per_experiment=90,
+        in_shape=[12, 1, 128, 128],
+        num_frames_per_experiment=90,  # this number is not always true
     ):
         self.data_root = data_root
         self.n_frames_input = n_frames_input
@@ -61,7 +62,7 @@ class KMC_Dataset(Dataset):
         self.total_frames_per_sample = n_frames_input + n_frames_output
         self.is_3D = is_3D
         self.cache = cache
-        self.resize = resize
+        self.target_size = (in_shape[-1], in_shape[-1])
         self.mean = None
         self.std = None
 
@@ -70,7 +71,7 @@ class KMC_Dataset(Dataset):
             self.num_frames_per_experiment // self.total_frames_per_sample
         )
 
-        self.data_h5 = os.path.join(data_root, "kmc/exp_1_complete_2D.h5")
+        self.data_h5 = os.path.join(data_root, datafile)
         self.file_handler = H5_Handler(self.data_h5)
 
         self.num_tot_frames = self.file_handler.get_total_frames()
@@ -103,10 +104,16 @@ class KMC_Dataset(Dataset):
 
         start_idx, end_idx = self.idx_mapping[index]
 
-        if self.cache:
-            images = self.cached_images[start_idx:end_idx]
-        else:
-            images = self.file_handler.read_images(start_idx, end_idx)
+        images = (
+            self.cached_images[start_idx:end_idx]
+            if self.cache
+            else self.file_handler.read_images(start_idx, end_idx)
+        )
+
+        # if self.cache:
+        #     images = self.cached_images[start_idx:end_idx]
+        # else:
+        #     images = self.file_handler.read_images(start_idx, end_idx)
 
         input_sample, label_sample = self.preprocess_data(images)
 
@@ -119,31 +126,54 @@ class KMC_Dataset(Dataset):
         Convert to PyTorch tensors
         Apply transformations if any
         """
-        if self.resize:
-            resized_images = self.resize_images(images, new_size=self.resize)
+        resized_images = (
+            self.resize_images(images, new_size=self.target_size)
+            if self.target_size[-1] < images.shape[-1]
+            else self.pad_images(images, new_size=self.target_size)
+        )
 
-        input_images = resized_images[: self.n_frames_input]
-        label_images = resized_images[self.n_frames_input :]
+        input_array = np.array(resized_images[: self.n_frames_input]).astype(np.float32)
+        label_array = np.array(resized_images[self.n_frames_input :]).astype(np.float32)
 
-        input_array = np.array(input_images).astype(np.float32)
-        label_array = np.array(label_images).astype(np.float32)
+        normalized_input_array = (input_array - 1) / 198.0
+        normalized_label_array = (label_array - 1) / 198.0
 
-        input_array = (input_array - 1) / 198.0
-        label_array = (label_array - 1) / 198.0
-
-        input_sample = torch.from_numpy(input_array).unsqueeze(1)
-        label_sample = torch.from_numpy(label_array).unsqueeze(1)
-
-        return input_sample, label_sample
+        return (
+            torch.from_numpy(normalized_input_array).unsqueeze(1),
+            torch.from_numpy(normalized_label_array).unsqueeze(1),
+        )
 
     @staticmethod
     def resize_images(images, new_size=(96, 96)):
+        if images.shape[-1] == new_size[-1]:
+            return images
         resized_images = []
         for image in images:
             pil_img = Image.fromarray(image)
             resized_img = pil_img.resize(new_size, Image.ANTIALIAS)
             resized_images.append(np.array(resized_img))
         return np.array(resized_images)
+
+    @staticmethod
+    def pad_images(images, new_size=(128, 128), image_mode="L"):
+        if images.shape[-1] == new_size[-1]:
+            return images
+        padded_images = []
+        for image in images:
+            # Create a new image with the desired size and black background
+            # 'L' mode is for (8-bit pixels, black and white)
+            padded_img = Image.new(image_mode, new_size, color=0)
+
+            pil_img = Image.fromarray(image)
+            # Calculate padding sizes
+            width, height = pil_img.size
+            left = (new_size[0] - width) // 2
+            top = (new_size[1] - height) // 2
+
+            padded_img.paste(pil_img, (left, top))
+            padded_images.append(np.array(padded_img))
+
+        return np.array(padded_images)
 
     def tensor_to_original_int_array(self, tensor):
         """
@@ -202,9 +232,11 @@ def load_data(
     val_batch_size,
     data_root,
     num_workers=4,
+    datafile="kmc/exp_1_complete_2D.h5",
     pre_seq_length=12,
     aft_seq_length=12,
-    in_shape=None,
+    in_shape=[12, 1, 100, 100],
+    num_frames_per_experiment=90,
     distributed=False,
     use_augment=False,
     use_prefetcher=False,
@@ -212,11 +244,12 @@ def load_data(
 ):
     dataset = KMC_Dataset(
         data_root,
+        datafile,
         n_frames_input=pre_seq_length,
         n_frames_output=aft_seq_length,
         is_3D=False,
         cache=False,
-        resize=(96, 96),
+        in_shape=in_shape,  #
     )
 
     train_set, vali_set = _split_train_vali(dataset, train_ratio=0.8)
@@ -265,4 +298,3 @@ if __name__ == "__main__":
     for item in dataloader_test:
         print(item[0].shape, item[1].shape)
         break
-

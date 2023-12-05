@@ -59,13 +59,6 @@ class BaseExperiment(object):
         self._dist = self.args.dist
         self._early_stop = self.args.early_stop_epoch
 
-        # init wandb
-        #wandb.init(
-        #    project="openSTL_PF",
-        #    entity="yourname",
-        #    sync_tensorboard=True,
-        #)
-
         self._preparation(dataloaders)
         if self._rank == 0:
             print_log(output_namespace(self.args))
@@ -241,6 +234,14 @@ class BaseExperiment(object):
         inputs, labels = first_batch
         print("input shape is ", inputs.shape)
         print("output label is ", labels.shape)
+
+        # update img_size
+        if self.config["dataname"] == "kmc":
+            self.config["img_size"] = (
+                inputs.shape[1],
+                inputs.shape[-2],
+                inputs.shape[-1],
+            )
 
         if self.vali_loader is None:
             self.vali_loader = self.test_loader

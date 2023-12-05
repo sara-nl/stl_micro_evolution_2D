@@ -30,6 +30,11 @@ def load_data(
     elif "kmc" in dataname:
         from .dataloader_kmc import load_data
 
+        cfg_dataloader["datafile"] = kwargs.get("datafile", "kmc/exp_1_complete_2D.h5")
+        cfg_dataloader["num_frames_per_experiment"] = kwargs.get(
+            "num_frames_per_experiment", 90
+        )
+
         return load_data(
             batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
         )
