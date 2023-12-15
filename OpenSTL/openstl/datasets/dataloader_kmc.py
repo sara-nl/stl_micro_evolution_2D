@@ -212,21 +212,22 @@ class KMC_Dataset(Dataset):
         Convert to PyTorch tensors
         Apply transformations if any
         """
+        # rescale
         resized_images = (
             self.resize_images(images, new_size=self.target_size)
             if self.target_size[-1] < images.shape[-1]
             else self.pad_images(images, new_size=self.target_size)
         )
+        # normalize
+        if resized_images.max() > 1.0:
+            norm_images = resized_images.astype(np.float32) / 199.0
 
-        input_array = np.array(resized_images[: self.n_frames_input]).astype(np.float32)
-        label_array = np.array(resized_images[self.n_frames_input :]).astype(np.float32)
-
-        normalized_input_array = (input_array - 1) / 198.0
-        normalized_label_array = (label_array - 1) / 198.0
+        input_sample = norm_images[: self.n_frames_input]
+        label_sample = norm_images[self.n_frames_input :]
 
         return (
-            torch.from_numpy(normalized_input_array).unsqueeze(1),
-            torch.from_numpy(normalized_label_array).unsqueeze(1),
+            torch.from_numpy(input_sample).unsqueeze(1),
+            torch.from_numpy(label_sample).unsqueeze(1),
         )
 
     @staticmethod
@@ -261,18 +262,42 @@ class KMC_Dataset(Dataset):
 
         return np.array(padded_images)
 
-    def tensor_to_original_int_array(self, tensor):
+    @staticmethod
+    def unpad_images(padded_images, original_size=(100, 100)):
+        # Assuming the padding was added equally on all sides
+        # Calculate the starting and ending indices to slice
+        pad_height = (padded_images.shape[1] - original_size[0]) // 2
+        pad_width = (padded_images.shape[2] - original_size[1]) // 2
+
+        # Adjust if the padding added an extra pixel for odd differences
+        pad_height_extra = (padded_images.shape[1] - original_size[0]) % 2
+        pad_width_extra = (padded_images.shape[2] - original_size[1]) % 2
+
+        # Slice out the padding to get back the original images
+        unpadded_images = padded_images[
+            :,  # Keep all images/channels in the first dimension
+            pad_height : padded_images.shape[1]
+            - pad_height
+            - pad_height_extra,  # Remove padding from the second dimension
+            pad_width : padded_images.shape[2]
+            - pad_width
+            - pad_width_extra,  # Remove padding from the third dimension
+        ]
+
+        return unpadded_images
+
+    def tensor_to_original_array(self, tensor):
         """
         Send to CPU
         Reverse the normalization, remove channel dimension, convert to numpy int
         """
         tensor = tensor.cpu()
 
-        numpy_array = tensor.numpy() * 198.0 + 1
         numpy_array = numpy_array.squeeze(axis=1)
-        numpy_array = numpy_array.astype(np.int32)
+        input_rescaled = self.unpad_images(numpy_array, original_size=(100, 100))
+        input_denorm = input_rescaled * 199.0
 
-        return numpy_array
+        return input_denorm
 
 
 class KMC_Subset(Subset):
@@ -291,8 +316,8 @@ class KMC_Subset(Subset):
     def std(self):
         return self.dataset.std
 
-    def tensor_to_original_int_array(self, tensor):
-        return self.dataset.tensor_to_original_int_array(tensor)
+    def tensor_to_original_array(self, tensor):
+        return self.dataset.tensor_to_original_array(tensor)
 
 
 def _split_train_vali(dataset, train_ratio=0.8):
