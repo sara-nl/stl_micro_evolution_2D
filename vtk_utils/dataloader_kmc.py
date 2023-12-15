@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 
-from openstl.datasets.utils import create_loader
 
 # TODO
 # class is modified to handle more h5 data
@@ -53,7 +52,7 @@ class KMC_Dataset(Dataset):
     def __init__(
         self,
         data_root,
-        datafile,  # TODO modified here
+        datafiles,  # TODO modified here
         n_frames_input=10,
         n_frames_output=10,
         is_3D=False,
@@ -61,7 +60,7 @@ class KMC_Dataset(Dataset):
         in_shape=[12, 1, 128, 128],
     ):
         self.data_root = data_root
-        self.datafile = datafile
+        self.datafiles = datafiles
         self.n_frames_input = n_frames_input
         self.n_frames_output = n_frames_output
         self.total_frames_per_sample = n_frames_input + n_frames_output
@@ -72,19 +71,19 @@ class KMC_Dataset(Dataset):
         self.std = None
 
         # Initialize file handlers and store frames info
-        self.files_info = self.init_file_handlers(data_root, datafile)
+        self.files_info = self.init_file_handlers(data_root, datafiles)
         self.idx_mapping, self.dataset_len = self._build_combined_indices()
 
         if cache:
             self.cached_images = self.cache_images()
 
-    def init_file_handlers(self, data_root, datafile):
+    def init_file_handlers(self, data_root, datafiles):
         """
         Initialize file handlers for each data file and store their frames information.
 
         Parameters:
         - data_root (str): The root directory where the data files are located.
-        - datafile (List[Tuple[str, int]]): List of tuples containing file names and
+        - datafiles (List[Tuple[str, int]]): List of tuples containing file names and
           their corresponding number of frames per experiment.
 
         Returns:
@@ -92,7 +91,7 @@ class KMC_Dataset(Dataset):
           the number of frames per experiment, and other relevant information for each file.
         """
         files_info = []
-        for filename, num_frames in datafile:
+        for filename, num_frames in datafiles:
             file_path = os.path.join(data_root, filename)
             file_handler = H5_Handler(file_path)
 
@@ -295,6 +294,53 @@ class KMC_Subset(Subset):
         return self.dataset.tensor_to_original_int_array(tensor)
 
 
+def create_loader(
+    dataset,
+    batch_size,
+    shuffle=True,
+    is_training=False,
+    mean=None,
+    std=None,
+    num_workers=1,
+    num_aug_repeats=0,
+    input_channels=1,
+    use_prefetcher=False,
+    distributed=False,
+    pin_memory=False,
+    drop_last=False,
+    fp16=False,
+    collate_fn=None,
+    persistent_workers=True,
+    worker_seeding="all",
+):
+    sampler = None
+
+    if collate_fn is None:
+        collate_fn = torch.utils.data.dataloader.default_collate
+    loader_class = torch.utils.data.DataLoader
+
+    loader_args = dict(
+        batch_size=batch_size,
+        shuffle=shuffle
+        and (not isinstance(dataset, torch.utils.data.IterableDataset))
+        and sampler is None
+        and is_training,
+        num_workers=num_workers,
+        sampler=sampler,
+        collate_fn=collate_fn,
+        pin_memory=pin_memory,
+        drop_last=drop_last,
+        persistent_workers=persistent_workers,
+    )
+    try:
+        loader = loader_class(dataset, **loader_args)
+    except TypeError:
+        loader_args.pop("persistent_workers")  # only in Pytorch 1.7+
+        loader = loader_class(dataset, **loader_args)
+
+    return loader
+
+
 def _split_train_vali(dataset, train_ratio=0.8):
     """
     Create training and validation dataset
@@ -368,19 +414,41 @@ def load_data(
 
 
 if __name__ == "__main__":
-    dataloader_train, _, dataloader_test = load_data(
-        batch_size=16,
-        val_batch_size=4,
-        data_root="../../data/",
-        num_workers=4,
-        pre_seq_length=10,
-        aft_seq_length=10,
+    datafiles = [
+        ("exp_1_complete_2D.h5", 90),
+        ("exp_1_complete_2D.h5", 45),
+        ("exp_3_complete_2D.h5", 90),
+    ]
+    dataset = KMC_Dataset(
+        data_root="/projects/1/monicar",
+        datafiles=datafiles,
+        n_frames_input=10,
+        n_frames_output=10,
+        is_3D=False,
+        cache=False,
+    )
+    print("creating dataset")
+
+    index = len(dataset) - 1  # Choose the index of the sample to access
+    input_sample, label_sample = dataset[index]
+
+    train_dataset, valid_dataset = _split_train_vali(dataset, train_ratio=0.8)
+
+    for i in range(100):
+        input_sample, label_sample = train_dataset[i]
+
+    train_loader = create_loader(
+        dataset,
+        batch_size=6,
+        shuffle=True,
+        is_training=True,
+        pin_memory=True,
+        drop_last=True,
+        num_workers=1,
+        distributed=False,
+        use_prefetcher=False,
     )
 
-    print(len(dataloader_train), len(dataloader_test))
-    for item in dataloader_train:
-        print(item[0].shape, item[1].shape)
-        break
-    for item in dataloader_test:
-        print(item[0].shape, item[1].shape)
-        break
+    first_batch = next(iter(train_loader))
+
+    print("done")
