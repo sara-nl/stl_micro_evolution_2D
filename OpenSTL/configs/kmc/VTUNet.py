@@ -3,7 +3,7 @@ method = "VTUNet"
 # kmc data
 datafile = [
     ("exp_1_complete_2D.h5", 90),
-    ("exp_1_complete_2D.h5", 45),
+    ("exp_2_complete_2D.h5", 55),
     ("exp_3_complete_2D.h5", 90),
 ]
 num_frames_per_experiment = 90
