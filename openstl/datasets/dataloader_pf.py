@@ -50,18 +50,31 @@ class PF_Dataset(Dataset):
         )
 
         # if the data is in [0, 255], rescale it into [0, 1]
+        print("max values is ", self.videos.max())
+        print("min instead is", self.videos.min())
         if self.videos.max() > 1.0:
+            print(" iam normalizeing")
             self.videos = self.videos.astype(np.float32) / 255.0
+
+        # if transform:
+        # get the mean/std values along the channel dimension
+        # mean = data.mean(axis=(0, 1, 2, 3)).reshape(1, 1, -1, 1, 1)
+        # std = data.std(axis=(0, 1, 2, 3)).reshape(1, 1, -1, 1, 1)
+        # data = (data - mean) / std
+        # self.mean = mean
+        # self.std = std
 
     def _sample_frames_from_npz(self, npz_path, num_frames=20, key="input_raw_data"):
         with np.load(npz_path) as data:
             all_frames = data[key]
 
-        # Calculate how many full samples can be formed and take only the frames that fit into full samples
+        # Calculate how many full samples can be formed
         num_videos = len(all_frames) // num_frames
+
+        # Take only the frames that fit into full samples
         all_frames = all_frames[: num_videos * num_frames]
 
-        # Reshape the frames into videos of size (num_videos, num_frames, size)
+        # Reshape the frames into videos of size (num_videos, num_frames, ...)
         videos = all_frames.reshape((-1, num_frames) + all_frames.shape[1:])
 
         return videos
@@ -138,23 +151,29 @@ def load_data(
         use_prefetcher=use_prefetcher,
     )
 
+    print(
+        f"train set size: {len(dataloader_train)*batch_size}, valid size is {len(dataloader_test)*val_batch_size}"
+    )
+    print(f"num batches: {len(dataloader_train)}, valid size is {len(dataloader_test)}")
+
     return dataloader_train, dataloader_vali, dataloader_test
 
 
 if __name__ == "__main__":
     dataloader_train, _, dataloader_test = load_data(
         batch_size=16,
-        val_batch_size=4,
-        data_root="../../data/",
+        val_batch_size=1,
+        data_root="/home/monicar/prjsp",
         num_workers=4,
-        pre_seq_length=10,
-        aft_seq_length=10,
+        pre_seq_length=12,
+        aft_seq_length=12,
     )
 
     print(len(dataloader_train), len(dataloader_test))
-    for item in dataloader_train:
+    for item in dataloader_test:
         print(item[0].shape, item[1].shape)
         break
-    for item in dataloader_test:
+
+    for item in dataloader_train:
         print(item[0].shape, item[1].shape)
         break

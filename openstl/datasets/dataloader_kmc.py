@@ -1,8 +1,9 @@
 import os
+import os.path as osp
 import random
 import numpy as np
 from PIL import Image
-
+from typing import List
 import h5py
 
 import torch
@@ -11,136 +12,60 @@ from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 
 from openstl.datasets.utils import create_loader
-
-# TODO
-# class is modified to handle more h5 data
-# test if the idxs are correctly built
-# train on more data
-
-
-class H5_Handler:
-    def __init__(self, file_path):
-        self.file_path = file_path
-        print("Initializing HDF5 dataset with path: ", file_path)
-
-    def read_images(self, start_idx, end_idx):
-        with h5py.File(self.file_path, "r") as file:
-            images = file["images"][start_idx:end_idx]
-        return images
-
-    def get_total_frames(self):
-        with h5py.File(self.file_path, "r") as file:
-            num_frames = len(file["images"])
-        return num_frames
-
-    def cache_images(self):
-        with h5py.File(self.file_path, "r") as file:
-            cached_images = list(file["images"])
-        return cached_images
+from openstl.datasets.image_utils import (
+    preprocess_data,
+    resize_images,
+    pad_images,
+    unpad_images,
+    pad_temporal_sequence,
+    tensor_to_original_array,
+)
+from openstl.datasets.file_utils import (
+    init_file_handlers,
+    build_combined_indices_sampled,
+    resolve_index,
+    build_list_of_samples,
+    randomly_sample_experiments_from_datafile,
+)
 
 
-class KMC_Dataset(Dataset):
-    """Kinetic Monte Carlo Potts Microstructure Dataset
+class Experiments_Handler:
+    """Kinetic Monte Carlo Potts Microstructure Experiment
 
     Args:
-        data_root (str): Path to the dataset.
+        data_root (str): Path where the dataset (hdf5) is stored.
+        datafile (List[Tuple[str, int]]): List of tuples containing file names and
+          their corresponding number of frames per experiment.
         n_frames_input, n_frames_output (int): The number of input and prediction
             video frames.
-        transform (None): Apply transformation.
         is_3D (bool): Whether to use the 3D or 2D data.
+        in_shape (tuple of ints): expected input shape of the data. This should be in the format (time frames, channels, height, width).
     """
 
     def __init__(
         self,
-        data_root,
-        datafile,  # TODO modified here
-        n_frames_input=10,
-        n_frames_output=10,
-        is_3D=False,
-        cache=False,
-        in_shape=[12, 1, 128, 128],
+        data_root: str,
+        datafile: List[tuple[str, int, int]],
+        is_3D: bool = False,
+        cache: bool = False,
+        seed: bool = None,
     ):
         self.data_root = data_root
         self.datafile = datafile
-        self.n_frames_input = n_frames_input
-        self.n_frames_output = n_frames_output
-        self.total_frames_per_sample = n_frames_input + n_frames_output
         self.is_3D = is_3D
         self.cache = cache
-        self.target_size = (in_shape[-1], in_shape[-1])
-        self.mean = None
-        self.std = None
 
-        # Initialize file handlers and store frames info
-        self.files_info = self.init_file_handlers(data_root, datafile)
-        self.idx_mapping, self.dataset_len = self._build_combined_indices()
+        # perform experiment sampling from each file
+        (
+            self.files_info,
+            self.list_of_experiments,
+            self.num_of_experiments,
+        ) = randomly_sample_experiments_from_datafile(
+            self.data_root, self.datafile, random_seed=seed
+        )
 
         if cache:
             self.cached_images = self.cache_images()
-
-    def init_file_handlers(self, data_root, datafile):
-        """
-        Initialize file handlers for each data file and store their frames information.
-
-        Parameters:
-        - data_root (str): The root directory where the data files are located.
-        - datafile (List[Tuple[str, int]]): List of tuples containing file names and
-          their corresponding number of frames per experiment.
-
-        Returns:
-        - List[Dict]: A list of dictionaries, each containing the file handler,
-          the number of frames per experiment, and other relevant information for each file.
-        """
-        files_info = []
-        for filename, num_frames in datafile:
-            file_path = os.path.join(data_root, filename)
-            file_handler = H5_Handler(file_path)
-
-            file_info = {
-                "file_handler": file_handler,
-                "num_frames_per_experiment": num_frames,
-            }
-            files_info.append(file_info)
-
-        return files_info
-
-    def _build_combined_indices(self):
-        """
-        Build a combined list of indices for samples from all data files.
-
-        Returns:
-        - List[Tuple[int, int]]: A combined list of tuples, where each tuple contains
-          start and end frame indices for each sample across all files.
-        """
-        combined_indices = []
-        offset = 0  # Offset to adjust indices for each file
-
-        for file_info in self.files_info:
-            num_frames_per_experiment = file_info["num_frames_per_experiment"]
-            file_handler = file_info["file_handler"]
-
-            num_of_samples = (
-                num_frames_per_experiment // self.total_frames_per_sample
-            )  # num of samples that i could get from a directory (experiment)
-            num_of_experiments = (
-                file_handler.get_total_frames() // num_frames_per_experiment
-            )
-
-            for exp_idx in range(num_of_experiments - 1):
-                for sample_idx in range(num_of_samples):
-                    start_idx = (
-                        offset
-                        + exp_idx * num_frames_per_experiment
-                        + sample_idx * self.total_frames_per_sample
-                    )
-                    end_idx = start_idx + self.total_frames_per_sample
-
-                    combined_indices.append((start_idx, end_idx))
-
-            # Update offset for the next file
-            offset += file_handler.get_total_frames()
-
-        return combined_indices, len(combined_indices)
 
     def cache_images(self):
         """
@@ -154,6 +79,68 @@ class KMC_Dataset(Dataset):
 
         return cached_images
 
+    def load_images(self, filename, start_idx, end_idx):
+        if (
+            len(
+                (
+                    file_handler_collection := [
+                        file_info["file_handler"]
+                        for file_info in self.files_info
+                        if file_info["file_name"] == filename
+                    ]
+                )
+            )
+            == 1
+        ):
+            file_handler = file_handler_collection[0]
+        else:
+            raise Exception(f"The input includes two files with {filename=}")
+
+        if self.cache:
+            file_name = os.path.basename(file_handler.file_path)
+            images = self.cached_images[file_name][start_idx:end_idx]
+        else:
+            images = file_handler.read_images(start_idx, end_idx)
+        return images
+
+    def __len__(self):
+        return self.num_of_experiments
+
+
+class KMC_Dataset(Dataset):
+    """
+    A custom subset that allows access to additional attributes of the parent dataset.
+    """
+
+    def __init__(
+        self,
+        experiments_handler: Experiments_Handler,
+        indices,
+        n_frames_input,
+        n_frames_output,
+        in_shape,
+        sliding_win,
+    ):
+        self.experiments_handler = experiments_handler
+        self.files_info = self.experiments_handler.files_info
+        self.indices = indices
+        self.sliding_win = sliding_win
+        self.mean = 0.5
+        self.std = 0.3
+
+        self.n_frames_input = n_frames_input
+        self.n_frames_output = n_frames_output
+        self.total_frames_per_sample = n_frames_input + n_frames_output
+        self.target_size = (in_shape[-1], in_shape[-1])
+
+        self.idx_mapping, self.dataset_len = build_list_of_samples(
+            self.indices,
+            self.files_info,
+            self.experiments_handler.list_of_experiments,
+            self.total_frames_per_sample,
+            self.sliding_win,
+        )
+
     def __len__(self):
         return self.dataset_len
 
@@ -164,209 +151,140 @@ class KMC_Dataset(Dataset):
         if index < 0 or index >= self.dataset_len:
             raise IndexError("Index out of range")
 
-        start_idx, end_idx = self.idx_mapping[index]
-        file_index, local_start_idx, local_end_idx = self.resolve_index(
-            start_idx, end_idx
+        file_name, start_idx, end_idx = self.idx_mapping[index]
+        # file_name = self.files_info[file_index]["file_name"]
+
+        images = self.experiments_handler.load_images(file_name, start_idx, end_idx)
+
+        # _visualize_sample(images, index, exp_name="example")
+
+        input_sample, label_sample = preprocess_data(
+            images, self.target_size, self.n_frames_input, self.n_frames_output
         )
-
-        if self.cache:
-            file_name = os.path.basename(
-                self.files_info[file_index]["file_handler"].file_path
-            )
-            images = self.cached_images[file_name][local_start_idx:local_end_idx]
-        else:
-            images = self.files_info[file_index]["file_handler"].read_images(
-                local_start_idx, local_end_idx
-            )
-
-        input_sample, label_sample = self.preprocess_data(images)
+        # print("input shape is:", input_sample.shape)
 
         return input_sample, label_sample
 
-    def resolve_index(self, global_start_idx, global_end_idx):
-        """
-        Resolve a global index to a specific file and its local index range.
 
-        Parameters:
-        - global_start_idx (int): The global start index.
-        - global_end_idx (int): The global end index.
+def _visualize_sample(images, index, exp_name="example"):
+    for i, frame in enumerate(images):
+        if isinstance(frame, torch.Tensor):
+            frame = tensor_to_original_array(frame)
 
-        Returns:
-        - Tuple[int, int, int]: A tuple containing the file index, local start index, and local end index.
-        """
-        offset = 0
-        for file_idx, file_info in enumerate(self.files_info):
-            file_total_frames = file_info["file_handler"].get_total_frames()
-            if global_start_idx < offset + file_total_frames:
-                local_start_idx = global_start_idx - offset
-                local_end_idx = min(global_end_idx - offset, file_total_frames)
-                return file_idx, local_start_idx, local_end_idx
-            offset += file_total_frames
-
-        raise IndexError("Global index out of range")
-
-    def preprocess_data(self, images):
-        """
-        Convert to numpy arrays and add channel dimension
-        Normalize the range 1-199
-        Convert to PyTorch tensors
-        Apply transformations if any
-        """
-        # rescale
-        resized_images = (
-            self.resize_images(images, new_size=self.target_size)
-            if self.target_size[-1] < images.shape[-1]
-            else self.pad_images(images, new_size=self.target_size)
-        )
-        # normalize
-        if resized_images.max() > 1.0:
-            norm_images = resized_images.astype(np.float32) / 199.0
-
-        input_sample = norm_images[: self.n_frames_input]
-        label_sample = norm_images[self.n_frames_input :]
-
-        return (
-            torch.from_numpy(input_sample).unsqueeze(1),
-            torch.from_numpy(label_sample).unsqueeze(1),
-        )
-
-    @staticmethod
-    def resize_images(images, new_size=(96, 96)):
-        if images.shape[-1] == new_size[-1]:
-            return images
-        resized_images = []
-        for image in images:
-            pil_img = Image.fromarray(image)
-            resized_img = pil_img.resize(new_size, Image.ANTIALIAS)
-            resized_images.append(np.array(resized_img))
-        return np.array(resized_images)
-
-    @staticmethod
-    def pad_images(images, new_size=(128, 128), image_mode="L"):
-        if images.shape[-1] == new_size[-1]:
-            return images
-        padded_images = []
-        for image in images:
-            # Create a new image with the desired size and black background
-            # 'L' mode is for (8-bit pixels, black and white)
-            padded_img = Image.new(image_mode, new_size, color=0)
-
-            pil_img = Image.fromarray(image)
-            # Calculate padding sizes
-            width, height = pil_img.size
-            left = (new_size[0] - width) // 2
-            top = (new_size[1] - height) // 2
-
-            padded_img.paste(pil_img, (left, top))
-            padded_images.append(np.array(padded_img))
-
-        return np.array(padded_images)
-
-    @staticmethod
-    def unpad_images(padded_images, original_size=(100, 100)):
-        # Assuming the padding was added equally on all sides
-        # Calculate the starting and ending indices to slice
-        pad_height = (padded_images.shape[1] - original_size[0]) // 2
-        pad_width = (padded_images.shape[2] - original_size[1]) // 2
-
-        # Adjust if the padding added an extra pixel for odd differences
-        pad_height_extra = (padded_images.shape[1] - original_size[0]) % 2
-        pad_width_extra = (padded_images.shape[2] - original_size[1]) % 2
-
-        # Slice out the padding to get back the original images
-        unpadded_images = padded_images[
-            :,  # Keep all images/channels in the first dimension
-            pad_height : padded_images.shape[1]
-            - pad_height
-            - pad_height_extra,  # Remove padding from the second dimension
-            pad_width : padded_images.shape[2]
-            - pad_width
-            - pad_width_extra,  # Remove padding from the third dimension
-        ]
-
-        return unpadded_images
-
-    def tensor_to_original_array(self, tensor):
-        """
-        Send to CPU
-        Reverse the normalization, remove channel dimension, convert to numpy int
-        """
-        tensor = tensor.cpu()
-
-        numpy_array = numpy_array.squeeze(axis=1)
-        input_rescaled = self.unpad_images(numpy_array, original_size=(100, 100))
-        input_denorm = input_rescaled * 199.0
-
-        return input_denorm
+        data_uint8 = frame.astype(np.uint8)
+        image = Image.fromarray(data_uint8)
+        image.save(f"visuals/{exp_name}_{index}_{i}.png")
 
 
-class KMC_Subset(Subset):
+def create_train_vali_datasets(
+    experiments_handler: Experiments_Handler,
+    n_frames_input,
+    n_frames_output,
+    in_shape,
+    random_split,
+    random_seed,
+    train_ratio=0.9,
+    sliding_win=0,
+):
     """
-    A custom subset that allows access to additional attributes of the parent dataset.
-    """
-
-    def __init__(self, dataset, indices):
-        super(KMC_Subset, self).__init__(dataset, indices)
-
-    @property
-    def mean(self):
-        return self.dataset.mean
-
-    @property
-    def std(self):
-        return self.dataset.std
-
-    def tensor_to_original_array(self, tensor):
-        return self.dataset.tensor_to_original_array(tensor)
-
-
-def _split_train_vali(dataset, train_ratio=0.8):
-    """
-    Create training and validation dataset
+    Create training and validation dataset after shuffling
     Params: define split ration for training and validation, default: 80% for training
+    Random_seed: Optional seed for the random number generator for reproducibility.
     """
-    num_train = int(len(dataset) * train_ratio)
-    num_val = len(dataset) - num_train
+    num_experiments = len(experiments_handler)
+    indices = np.arange(num_experiments)
 
-    # Generate indices for training and validation sets
-    train_indices = range(0, num_train)
-    val_indices = range(num_train, len(dataset))
+    num_train = int(num_experiments * train_ratio)
 
-    train_dataset = KMC_Subset(dataset, train_indices)
-    vali_dataset = KMC_Subset(dataset, val_indices)
+    if random_split:
+        # Set the random seed if specified
+        if random_seed is not None:
+            np.random.seed(random_seed)
+
+        np.random.shuffle(indices)
+        train_indices = indices[:num_train]
+        val_indices = indices[num_train:]
+    else:
+        train_indices = range(0, num_train)
+        val_indices = range(num_train, num_experiments)
+
+    train_dataset = KMC_Dataset(
+        experiments_handler,
+        train_indices,
+        n_frames_input,
+        n_frames_output,
+        in_shape,
+        sliding_win=sliding_win,
+    )
+    vali_dataset = KMC_Dataset(
+        experiments_handler,
+        val_indices,
+        n_frames_input,
+        n_frames_output,
+        in_shape,
+        sliding_win=sliding_win,
+    )
 
     return train_dataset, vali_dataset
+
+
+def compute_mean_std(loader):
+    """Compute the mean and std dev for a DataLoader of images."""
+    mean = 0.0
+    var = 0.0
+    nb_samples = 0
+    for data, _ in loader:
+        batch_samples = data.size(0)
+        data = data.view(batch_samples, data.size(1), -1)
+        mean += data.mean(2).sum(0)
+        var += data.var(2).sum(0)
+        nb_samples += batch_samples
+
+    mean /= nb_samples
+    std = torch.sqrt(var / nb_samples)
+    return mean, std
 
 
 def load_data(
     batch_size,
     val_batch_size,
     data_root,
-    num_workers=4,
-    datafile="kmc/exp_1_complete_2D.h5",
-    pre_seq_length=12,
-    aft_seq_length=12,
-    in_shape=[12, 1, 100, 100],
-    num_frames_per_experiment=90,
-    distributed=False,
-    use_augment=False,
-    use_prefetcher=False,
-    drop_last=False,
+    num_workers,
+    datafile,
+    pre_seq_length,
+    aft_seq_length,
+    in_shape,
+    seed,
+    random_split,
+    sliding_win,
+    distributed,
+    use_augment,
+    use_prefetcher,
+    drop_last,
 ):
-    dataset = KMC_Dataset(
+    experiments_handler = Experiments_Handler(
         data_root,
         datafile,
-        n_frames_input=pre_seq_length,
-        n_frames_output=aft_seq_length,
         is_3D=False,
         cache=False,
-        in_shape=in_shape,  #
+        seed=seed,
     )
 
-    train_set, vali_set = _split_train_vali(dataset, train_ratio=0.9)
+    train_dataset, vali_dataset = create_train_vali_datasets(
+        experiments_handler,
+        n_frames_input=pre_seq_length,
+        n_frames_output=aft_seq_length,
+        in_shape=in_shape,
+        random_split=random_split,
+        random_seed=seed,
+        train_ratio=0.8,
+        sliding_win=sliding_win,
+    )
+    # i = 0
+    # sample_i = vali_set[i]
 
     dataloader_train = create_loader(
-        train_set,
+        train_dataset,
         batch_size=batch_size,
         shuffle=True,
         is_training=True,
@@ -378,7 +296,7 @@ def load_data(
     )
     dataloader_vali = None
     dataloader_test = create_loader(
-        vali_set,
+        vali_dataset,
         batch_size=val_batch_size,
         shuffle=False,
         is_training=False,
@@ -389,23 +307,63 @@ def load_data(
         use_prefetcher=use_prefetcher,
     )
 
+    print(
+        f"train set size: {len(dataloader_train)*batch_size}, valid size is {len(dataloader_test)*val_batch_size}"
+    )
+    print(f"num batches: {len(dataloader_train)}, valid size is {len(dataloader_test)}")
+
+    dataset_mean, dataset_std = compute_mean_std(dataloader_train)
+    print(f"Dataset Mean: {dataset_mean}, Dataset Std Dev: {dataset_std}")
+
+    dataset_mean, dataset_std = compute_mean_std(dataloader_test)
+
+    print(f"Dataset Mean: {dataset_mean}, Dataset Std Dev: {dataset_std}")
+
     return dataloader_train, dataloader_vali, dataloader_test
 
 
 if __name__ == "__main__":
+    datafile = [
+        ("exp_1_complete_2D.h5", 90, 5),
+    ]
+
+    #
+
     dataloader_train, _, dataloader_test = load_data(
-        batch_size=16,
-        val_batch_size=4,
-        data_root="../../data/",
+        batch_size=4,
+        val_batch_size=1,
+        data_root="/home/monicar/prjsp",
+        datafile=datafile,
         num_workers=4,
-        pre_seq_length=10,
-        aft_seq_length=10,
+        pre_seq_length=12,
+        aft_seq_length=12,
+        seed=42,
+        sliding_win=0,
+        in_shape=[12, 1, 100, 100],
+        random_split=True,
+        distributed=False,
+        use_augment=False,
+        use_prefetcher=False,
+        drop_last=False,
     )
 
-    print(len(dataloader_train), len(dataloader_test))
-    for item in dataloader_train:
-        print(item[0].shape, item[1].shape)
-        break
-    for item in dataloader_test:
-        print(item[0].shape, item[1].shape)
-        break
+    first_batch = next(iter(dataloader_test))
+
+    data_loader = dataloader_test
+    results = []
+
+    for idx, (batch_x, batch_y) in enumerate(data_loader):
+        results.append(
+            dict(
+                zip(
+                    ["inputs_dl", "trues_dl"],
+                    [
+                        batch_x.numpy(),
+                        batch_y.numpy(),
+                    ],
+                )
+            )
+        )
+
+    for np_data in ["inputs_dl", "trues_dl"]:
+        np.save(osp.join("visuals", np_data + ".npy"), results[np_data])

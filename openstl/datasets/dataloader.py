@@ -28,14 +28,14 @@ def load_data(
             batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
         )
     elif "kmc" in dataname:
-        from .dataloader_kmc import load_data
+        from .dataloader_kmc import load_data as load_data_kmc
 
         cfg_dataloader["datafile"] = kwargs.get("datafile", "kmc/exp_1_complete_2D.h5")
-        cfg_dataloader["num_frames_per_experiment"] = kwargs.get(
-            "num_frames_per_experiment", 90
-        )
+        cfg_dataloader["seed"] = kwargs.get("seed", None)
+        cfg_dataloader["random_split"] = kwargs.get("random_split", True)
+        cfg_dataloader["sliding_win"] = kwargs.get("sliding_win", 0)
 
-        return load_data(
+        return load_data_kmc(
             batch_size, val_batch_size, data_root, num_workers, **cfg_dataloader
         )
     else:
