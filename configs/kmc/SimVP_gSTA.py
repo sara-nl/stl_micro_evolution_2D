@@ -15,9 +15,9 @@ sched = "onecycle"
 
 yaml_file = "configs/kmc/experiments.yaml"
 datafile = [
-    ("exp_1_complete_2D.h5", 90, 4000),
-    ("exp_2_complete_2D.h5", 55, 4000),
-    ("exp_3_complete_2D.h5", 90, 4000),
+    ("exp_1_len_90_2D.h5", 90, 4000),
+    ("exp_2_len_55_2D.h5", 55, 4000),
+    ("exp_3_len_90_2D.h5", 90, 4000),
 ]
 seed = 0
 random_split = True

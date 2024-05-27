@@ -15,9 +15,9 @@ def preprocess_data(
     target_size=(128, 128),
     n_frames_input=12,
     n_frames_output=12,
-    denoise=True,
+    denoise=False,
     augment=False,
-    edge_enhance=True,
+    edge_enhance=False,
     contrast_factor=0.5,
 ):
     """

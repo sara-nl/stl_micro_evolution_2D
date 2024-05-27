@@ -3,9 +3,9 @@ method = "VTUNet"
 # kmc data
 yaml_file = "configs/kmc/experiments.yaml"
 datafile = [
-    ("exp_1_complete_2D.h5", 90, 4000),
-    ("exp_2_complete_2D.h5", 55, 4000),
-    ("exp_3_complete_2D.h5", 90, 4000),
+    ("exp_1_len_90_2D.h5", 90, 4000),
+    ("exp_2_len_55_2D.h5", 55, 4000),
+    ("exp_3_len_90_2D.h5", 90, 4000),
 ]
 seed = 42
 random_split = True
@@ -24,7 +24,7 @@ depths = [2, 2, 2, 1]
 num_heads = [3, 6, 12, 24]
 window_size = (7, 7, 7)  # was (2,7,7)
 zero_head = False
-num_classes = 200  # output_channels
+num_classes = 1  # output_channels
 model_type = "gSTA"
 
 # training
